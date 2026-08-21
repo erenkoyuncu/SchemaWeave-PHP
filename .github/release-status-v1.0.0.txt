@@ -1,0 +1,4 @@
+SchemaWeave PHP v1.0.0 release workflow
+build=success
+publish=failure
+url=
