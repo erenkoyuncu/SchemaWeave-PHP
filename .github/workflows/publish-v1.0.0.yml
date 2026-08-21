@@ -57,7 +57,7 @@ jobs:
         id: publish
         uses: actions/github-script@v7
         env:
-          TARGET_SHA: b62dd4ea99d3bf188c4e822a68840b018965c6b6
+          TARGET_SHA: 56b7e145f434d22ea43f5e80b7f1938bbcc194c1
         with:
           github-token: ${{ github.token }}
           script: |
