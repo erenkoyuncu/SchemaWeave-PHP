@@ -25,21 +25,13 @@ jobs:
           set -euo pipefail
           rm -rf build dist
           mkdir -p build/schemaweave-php dist
-
-          cp composer.json build/schemaweave-php/
-          cp README.md build/schemaweave-php/
-          cp LICENSE build/schemaweave-php/
-          cp CHANGELOG.md build/schemaweave-php/
-          cp SECURITY.md build/schemaweave-php/
-          cp CONTRIBUTING.md build/schemaweave-php/
+          cp composer.json README.md LICENSE CHANGELOG.md SECURITY.md CONTRIBUTING.md build/schemaweave-php/
           cp -R src build/schemaweave-php/src
           cp -R docs build/schemaweave-php/docs
           cp -R examples build/schemaweave-php/examples
-
           (cd build && zip -qr ../dist/schemaweave-php-1.0.0.zip schemaweave-php)
           unzip -t dist/schemaweave-php-1.0.0.zip
           (cd dist && sha256sum schemaweave-php-1.0.0.zip > SHA256SUMS.txt)
-
           cat > dist/RELEASE_NOTES.md <<'EOF'
           # SchemaWeave PHP v1.0.0
 
@@ -54,15 +46,11 @@ jobs:
           - Replaceable DataProvider and URL resolver contracts.
           - Array and callback data-provider implementations.
           - Schema extension API for project-specific entity types.
-          - Structural graph validation.
-          - Safe JSON-LD script output encoding.
-          - Conservative data-integrity rules: unavailable prices, offers, identifiers, ratings and reviews are omitted rather than fabricated.
+          - Structural graph validation and safe JSON-LD script output.
+          - Missing prices, offers, identifiers, ratings and reviews are omitted rather than fabricated.
 
           ## Package
           `schemaweave-php-1.0.0.zip` contains the core source, Composer metadata, documentation and integration examples.
-
-          ## WordPress
-          The WordPress/WooCommerce integration is maintained separately in the `erenkoyuncu/SchemaWeave` repository.
           EOF
 
       - name: Create release and upload assets
@@ -74,74 +62,60 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const tag = 'v1.0.0';
-            const target = process.env.TARGET_SHA;
-            const notes = fs.readFileSync('dist/RELEASE_NOTES.md', 'utf8');
-
-            let release;
             try {
-              release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
-            } catch (error) {
-              if (error.status !== 404) throw error;
+              const owner = context.repo.owner;
+              const repo = context.repo.repo;
+              const tag = 'v1.0.0';
+              const target = process.env.TARGET_SHA;
+              const notes = fs.readFileSync('dist/RELEASE_NOTES.md', 'utf8');
 
+              let release;
               try {
-                await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
-              } catch (refError) {
-                if (refError.status !== 404) throw refError;
-                await github.rest.git.createRef({
+                release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                try {
+                  await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+                } catch (refError) {
+                  if (refError.status !== 404) throw refError;
+                  await github.rest.git.createRef({ owner, repo, ref: `refs/tags/${tag}`, sha: target });
+                }
+                release = (await github.rest.repos.createRelease({
                   owner,
                   repo,
-                  ref: `refs/tags/${tag}`,
-                  sha: target
+                  tag_name: tag,
+                  target_commitish: target,
+                  name: 'SchemaWeave PHP v1.0.0',
+                  body: notes,
+                  draft: false,
+                  prerelease: false
+                })).data;
+              }
+
+              const assets = [
+                ['dist/schemaweave-php-1.0.0.zip', 'schemaweave-php-1.0.0.zip', 'application/zip'],
+                ['dist/SHA256SUMS.txt', 'SHA256SUMS.txt', 'text/plain']
+              ];
+              const existing = (await github.rest.repos.listReleaseAssets({ owner, repo, release_id: release.id, per_page: 100 })).data;
+              for (const [path, name, contentType] of assets) {
+                const old = existing.find(asset => asset.name === name);
+                if (old) await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: old.id });
+                const data = fs.readFileSync(path);
+                await github.rest.repos.uploadReleaseAsset({
+                  owner,
+                  repo,
+                  release_id: release.id,
+                  name,
+                  data,
+                  headers: { 'content-type': contentType, 'content-length': data.length }
                 });
               }
-
-              release = (await github.rest.repos.createRelease({
-                owner,
-                repo,
-                tag_name: tag,
-                target_commitish: target,
-                name: 'SchemaWeave PHP v1.0.0',
-                body: notes,
-                draft: false,
-                prerelease: false
-              })).data;
+              fs.writeFileSync('/tmp/release-url.txt', release.html_url + '\n');
+            } catch (error) {
+              const details = error?.response?.data ? JSON.stringify(error.response.data) : '';
+              fs.writeFileSync('/tmp/release-error.txt', `${error.status || ''} ${error.message || error}\n${details}\n`);
+              throw error;
             }
-
-            const assets = [
-              ['dist/schemaweave-php-1.0.0.zip', 'schemaweave-php-1.0.0.zip', 'application/zip'],
-              ['dist/SHA256SUMS.txt', 'SHA256SUMS.txt', 'text/plain']
-            ];
-
-            const existing = (await github.rest.repos.listReleaseAssets({
-              owner,
-              repo,
-              release_id: release.id,
-              per_page: 100
-            })).data;
-
-            for (const [path, name, contentType] of assets) {
-              const old = existing.find(asset => asset.name === name);
-              if (old) {
-                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: old.id });
-              }
-              const data = fs.readFileSync(path);
-              await github.rest.repos.uploadReleaseAsset({
-                owner,
-                repo,
-                release_id: release.id,
-                name,
-                data,
-                headers: {
-                  'content-type': contentType,
-                  'content-length': data.length
-                }
-              });
-            }
-
-            fs.writeFileSync('/tmp/release-url.txt', release.html_url + '\n');
 
       - name: Record outcome
         if: always()
@@ -155,24 +129,20 @@ jobs:
             const fs = require('fs');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            let url = '';
-            if (fs.existsSync('/tmp/release-url.txt')) {
-              url = fs.readFileSync('/tmp/release-url.txt', 'utf8').trim();
-            }
+            const url = fs.existsSync('/tmp/release-url.txt') ? fs.readFileSync('/tmp/release-url.txt', 'utf8').trim() : '';
+            const error = fs.existsSync('/tmp/release-error.txt') ? fs.readFileSync('/tmp/release-error.txt', 'utf8').trim() : '';
             const text = [
               'SchemaWeave PHP v1.0.0 release workflow',
               `build=${process.env.BUILD_OUTCOME}`,
               `publish=${process.env.PUBLISH_OUTCOME}`,
-              url ? `url=${url}` : 'url='
+              `url=${url}`,
+              `error=${error}`
             ].join('\n') + '\n';
             const content = Buffer.from(text).toString('base64');
             const path = '.github/release-status-v1.0.0.txt';
             let sha;
-            try {
-              sha = (await github.rest.repos.getContent({ owner, repo, path })).data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
+            try { sha = (await github.rest.repos.getContent({ owner, repo, path })).data.sha; }
+            catch (e) { if (e.status !== 404) throw e; }
             await github.rest.repos.createOrUpdateFileContents({
               owner,
               repo,
