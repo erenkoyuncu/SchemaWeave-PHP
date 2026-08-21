@@ -1,6 +1,5 @@
 SchemaWeave PHP v1.0.0 release workflow
 build=success
-publish=failure
-url=
-error=422 Object does not exist
-{"message":"Object does not exist","documentation_url":"https://docs.github.com/rest/git/refs#create-a-reference","status":"422"}
+publish=success
+url=https://github.com/erenkoyuncu/SchemaWeave-PHP/releases/tag/v1.0.0
+error=
