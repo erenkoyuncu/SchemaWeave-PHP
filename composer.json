@@ -1,0 +1,41 @@
+{
+  "name": "erenkoyuncu/schemaweave",
+  "description": "Framework-agnostic Schema.org JSON-LD engine for PHP 7.4+.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "SchemaWeave\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "SchemaWeave\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "@php tests/run.php",
+    "lint": "@php -l tests/run.php"
+  },
+  "keywords": [
+    "schema.org",
+    "json-ld",
+    "structured-data",
+    "php",
+    "seo"
+  ],
+  "homepage": "https://github.com/erenkoyuncu/SchemaWeave-PHP",
+  "authors": [
+    {
+      "name": "Eren Koyuncu",
+      "homepage": "https://github.com/erenkoyuncu"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/erenkoyuncu/SchemaWeave-PHP/issues",
+    "source": "https://github.com/erenkoyuncu/SchemaWeave-PHP"
+  }
+}
