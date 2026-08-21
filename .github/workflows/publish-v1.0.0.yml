@@ -1,0 +1,122 @@
+name: Publish SchemaWeave PHP v1.0.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v1.0.0.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer
+
+      - name: Validate and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer validate --strict --no-check-publish
+          find src tests examples -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/run.php
+
+      - name: Build PHP package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build dist
+          mkdir -p build/schemaweave-php dist
+
+          cp composer.json build/schemaweave-php/
+          cp README.md build/schemaweave-php/
+          cp LICENSE build/schemaweave-php/
+          cp CHANGELOG.md build/schemaweave-php/
+          cp SECURITY.md build/schemaweave-php/
+          cp CONTRIBUTING.md build/schemaweave-php/
+          cp -R src build/schemaweave-php/src
+          cp -R docs build/schemaweave-php/docs
+          cp -R examples build/schemaweave-php/examples
+
+          (cd build && zip -qr ../dist/schemaweave-php-1.0.0.zip schemaweave-php)
+          unzip -t dist/schemaweave-php-1.0.0.zip
+          (cd dist && sha256sum schemaweave-php-1.0.0.zip > SHA256SUMS.txt)
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > dist/RELEASE_NOTES.md <<'EOF'
+          # SchemaWeave PHP v1.0.0
+
+          First stable public release of the framework-agnostic Schema.org JSON-LD engine behind SchemaWeave.
+
+          ## Highlights
+          - PHP 7.4+ and PSR-4 friendly architecture.
+          - Organization, WebSite and LocalBusiness graph generation.
+          - WebPage variants including AboutPage, ContactPage, ProfilePage, SearchResultsPage and CollectionPage.
+          - Product and BlogPosting entities.
+          - BreadcrumbList, ItemList and FAQPage support.
+          - Replaceable DataProvider and URL resolver contracts.
+          - Array and callback data-provider implementations.
+          - Schema extension API for project-specific entity types.
+          - Structural graph validation.
+          - Safe JSON-LD script output encoding.
+          - Conservative data-integrity rules: unavailable prices, offers, identifiers, ratings and reviews are omitted rather than fabricated.
+
+          ## Package
+          `schemaweave-php-1.0.0.zip` contains the core source, Composer metadata, documentation and integration examples.
+
+          ## WordPress
+          The WordPress/WooCommerce integration is maintained separately in the `erenkoyuncu/SchemaWeave` repository.
+          EOF
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: b62dd4ea99d3bf188c4e822a68840b018965c6b6
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release v1.0.0 already exists.'
+          else
+            gh release create v1.0.0 \
+              dist/schemaweave-php-1.0.0.zip \
+              dist/SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET_SHA" \
+              --title 'SchemaWeave PHP v1.0.0' \
+              --notes-file dist/RELEASE_NOTES.md
+          fi
+
+      - name: Verify published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_URL="$(gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+          printf 'SchemaWeave PHP v1.0.0 published\n%s\n' "$RELEASE_URL" > /tmp/release-status.txt
+          CONTENT="$(base64 -w0 /tmp/release-status.txt)"
+          EXISTING_SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/release-status-v1.0.0.txt" --jq .sha 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/.github/release-status-v1.0.0.txt" \
+              -f message='Record SchemaWeave PHP v1.0.0 release status' \
+              -f content="$CONTENT" \
+              -f sha="$EXISTING_SHA" >/dev/null
+          else
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/.github/release-status-v1.0.0.txt" \
+              -f message='Record SchemaWeave PHP v1.0.0 release status' \
+              -f content="$CONTENT" >/dev/null
+          fi
